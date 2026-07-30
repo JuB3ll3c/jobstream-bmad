@@ -1,131 +1,131 @@
 # Architecture Decisions — JobStream
 
-Toutes les décisions d'architecture prises pour JobStream, avec le contexte, les alternatives envisagées, et les conséquences.
+All architectural decisions made for JobStream, with context, alternatives considered, and consequences.
 
 ---
 
-## AD-1 — Paradigme Event-Driven Microservices
+## AD-1 — Event-Driven Microservices Paradigm
 
-**Contexte :** JobStream a deux workloads distincts : un CRUD classique (sauvegarde d'offres, gestion de CV, kanban) et un pipeline réactif I/O-bound (appels OpenAI, streaming SSE). Les mettre dans le même service aurait mélangé WebMVC et WebFlux ou imposé un compromis sur la stack.
+**Context:** JobStream has two distinct workloads: a classic CRUD (job saving, CV management, kanban) and a reactive I/O-bound pipeline (OpenAI calls, SSE streaming). Putting them in the same service would mix WebMVC and WebFlux or force a stack compromise.
 
-**Décision :** Deux services Spring Boot communiquant via Kafka. dashboard-service en WebMVC/JPA pour le CRUD, ai-analyzer-service en WebFlux/R2DBC pour le reactive. Aucun appel REST direct entre services — tout passe par Kafka.
+**Decision:** Two Spring Boot services communicating via Kafka. dashboard-service uses WebMVC/JPA for CRUD, ai-analyzer-service uses WebFlux/R2DBC for reactive processing. No direct REST calls between services — everything goes through Kafka.
 
-**Alternatives :**
-- Monolithe Spring Boot : plus simple à déployer, mais mélange les stacks et ne montre pas la maîtrise des microservices
-- Service unique avec modules : ne résout pas le conflit WebMVC/WebFlux
+**Alternatives:**
+- Single Spring Boot monolith: simpler to deploy, but mixes stacks and doesn't show microservices mastery
+- Single service with modules: doesn't resolve the WebMVC/WebFlux conflict
 
-**Conséquences :** +complexité infra (Kafka, 2 services), +clarté architecturale, vitrine technique plus riche.
-
----
-
-## AD-2 — Base de Données Partagée, Tables Isolées
-
-**Contexte :** Les deux services ont besoin d'accéder aux mêmes données (le dashboard a besoin des résultats d'analyse, l'analyzer a besoin du CV et des offres).
-
-**Décision :** PostgreSQL unique, mais chaque service écrit exclusivement dans ses propres tables. Le dashboard possède `saved_jobs` et `cv`. L'analyzer possède `analysis_results`. Chacun peut lire les tables de l'autre.
-
-**Alternatives :**
-- Deux bases de données séparées : plus "propre" en microservices, mais complexifie les jointures métier et ajoute de l'infra pour un projet solo
-- Base unique sans règle d'ownership : risque d'accidents (un service qui écrase les données de l'autre)
-
-**Conséquences :** Couplage faible sur le schéma (un changement de colonne dans `analysis_results` peut impacter les requêtes du dashboard). Acceptable pour un projet solo — si le projet devient multi-équipe, on migre vers deux bases.
+**Consequences:** +infra complexity (Kafka, 2 services), +architectural clarity, richer technical showcase.
 
 ---
 
-## AD-3 — Deux Topics Kafka
+## AD-2 — Shared Database, Isolated Tables
 
-**Contexte :** L'architecture initiale prévoyait un seul topic `analysis.request`. L'ajout de la cover letter (déclenchée séparément, après l'analyse) aurait forcé un champ `type` dans le message pour distinguer l'intention.
+**Context:** Both services need access to the same data (dashboard reads analysis results, analyzer reads CV and job offers).
 
-**Décision :** Deux topics dédiés : `analysis.request` et `cover-letter.request`. Chacun avec son consumer, sa DLT (`.DLT`), sa politique de retry.
+**Decision:** Single PostgreSQL instance, but each service writes exclusively to its own tables. Dashboard owns `saved_jobs` and `cv`. Analyzer owns `analysis_results`. Each can read the other's tables.
 
-**Alternatives :**
-- Topic unique avec champ `type` : plus simple mais mélange des responsabilités, difficile d'avoir des politiques de retry différentes
-- Appel REST direct pour la cover letter : casse le découplage event-driven
+**Alternatives:**
+- Two separate databases: cleaner microservices practice, but complicates business joins and adds infra for a solo project
+- Single database without ownership rules: risk of accidental cross-service writes
 
-**Conséquences :** +2 topics à gérer, mais isolation claire des flux. Chaque topic peut évoluer indépendamment.
-
----
-
-## AD-4 — Cover Letter Dépend de l'Analyse
-
-**Contexte :** La cover letter doit être contextuelle — utiliser les points forts/faibles identifiés par l'analyse pour personnaliser le message.
-
-**Décision :** L'analyzer vérifie l'existence d'un `analysis_results` pour le `saved_job_id` avant de traiter une demande de cover letter. Si absent, le message est rejeté vers la DLT.
-
-**Alternatives :**
-- Cover letter sans dépendance : plus simple mais génère des lettres génériques sans valeur
-- Forcer l'ordre dans le front (désactiver le bouton tant que l'analyse n'est pas faite) : suffisant en UI mais pas garantie au niveau message
-
-**Conséquences :** Sécurité au niveau du consumer. Le front peut aussi désactiver le bouton pour meilleure UX.
+**Consequences:** Loose schema coupling (a column change in `analysis_results` can impact dashboard queries). Acceptable for a solo project — migrate to two databases if the project becomes multi-team.
 
 ---
 
-## AD-5 — Statut Kanban dans saved_jobs
+## AD-3 — Two Kafka Topics
 
-**Contexte :** Le suivi des candidatures suit un cycle d'états (sauvegardé → analysé → cover letter → postulé → retour). Fallait décider où stocker cet état.
+**Context:** The initial architecture had a single `analysis.request` topic. Adding cover letter generation (triggered separately, after analysis) would require a `type` field in the message to distinguish intent.
 
-**Décision :** Une colonne `status` dans la table `saved_jobs`. Enum : `SAVED → ANALYZED → COVER_LETTER → APPLIED → POSITIVE | NEGATIVE`. Transitions forward-only. Le dashboard possède et mute ce champ.
+**Decision:** Two dedicated topics: `analysis.request` and `cover-letter.request`. Each with its own consumer, DLT (`.DLT`), and retry policy.
 
-**Alternatives :**
-- Table dédiée `application_status` avec historique : plus flexible (historique complet, états custom), mais overkill pour un besoin simple
-- Service dédié de state machine : prouesse technique inutile ici
+**Alternatives:**
+- Single topic with `type` field: simpler but mixes responsibilities, makes per-flow retry policies harder
+- Direct REST call for cover letter: breaks event-driven decoupling
 
-**Conséquences :** Simple, un seul point de vérité. Pas d'historique des transitions — si nécessaire plus tard, on ajoute une table de log.
-
----
-
-## AD-6 — CV Stocké en PostgreSQL
-
-**Contexte :** Le CV (format markdown) doit être accessible par l'analyzer pour les appels OpenAI. Sur un PC, on pourrait le stocker en fichier, mais l'analyzer dans son conteneur Docker n'y aurait pas accès.
-
-**Décision :** Table `cv` en PostgreSQL. Une seule ligne (un seul CV). Upload via `POST /api/cv` sur le dashboard. Contenu stocké en TEXT.
-
-**Alternatives :**
-- Fichier sur le filesystem avec volume Docker partagé : plus complexe à configurer, moins portable (différent selon OS/hébergeur)
-- Object storage (S3) : infra supplémentaire injustifiée pour un projet solo
-
-**Conséquences :** Dépendance à la DB pour un fichier. Si le CV devient volumineux (images), reconsidérer le stockage. Facile à migrer plus tard (l'interface est un upload HTTP, le backend de stockage est encapsulé).
+**Consequences:** Two topics to manage, but clear flow isolation. Each topic can evolve independently.
 
 ---
 
-## AD-7 — Cache Redis pour les Offres
+## AD-4 — Cover Letter Depends on Analysis
 
-**Contexte :** Les appels API vers JSearch et Adzuna ont des quotas et de la latence. Les mêmes recherches peuvent être répétées.
+**Context:** The cover letter must be contextual — using strengths/weaknesses identified by the analysis to personalize the message.
 
-**Décision :** Redis en cache-aside côté dashboard-service. TTL de 30 minutes. Clé = query string. Cache miss → appel API → stockage → retour. Cache hit → retour immédiat.
+**Decision:** The analyzer verifies `analysis_results` exists for the given `saved_job_id` before processing a cover letter request. If missing, the message is rejected to the DLT.
 
-**Alternatives :**
-- Cache en mémoire (Caffeine) : plus simple, pas d'infra Redis, mais perdu au redémarrage du service et pas partageable
-- Cache en base PostgreSQL : fonctionnel mais plus lent, Redis montre une techno supplémentaire
+**Alternatives:**
+- Cover letter without dependency: simpler but generates generic letters
+- Enforce order in the frontend (disable button until analysis is done): sufficient in UI but not guaranteed at message level
 
-**Conséquences :** Infra supplémentaire (Redis), montre une compétence recherchée. Facile à retirer si le projet reste solo et les quotas suffisent.
-
----
-
-## AD-8 — SSE par l'Analyzer
-
-**Contexte :** Le frontend doit recevoir les résultats d'analyse et de cover letter en temps réel. Le choix du canal de notification.
-
-**Décision :** L'ai-analyzer-service expose un unique endpoint SSE `GET /api/events`. Deux types d'événements : `analysis-completed` et `cover-letter-completed`. Single-instance (pas de scaling multi-instances nécessaire pour un projet solo).
-
-**Alternatives :**
-- WebSocket : bidirectionnel, plus lourd à mettre en œuvre. SSE suffit (unidirectionnel serveur → client)
-- Polling HTTP : simple mais pas temps réel, gaspillage de ressources
-- Dashboard comme relay : ferait transiter par un service non-réactif, ajouterait de la latence
-
-**Conséquences :** SSE est simple, unidirectionnel, natif dans le navigateur et WebFlux. Si passage multi-instances plus tard, ajouter un topic Kafka `sse.events` comme bus.
+**Consequences:** Safety at consumer level. The frontend can also disable the button for better UX.
 
 ---
 
-## AD-9 — Dead-Letter Topic par Topic
+## AD-5 — Kanban Status in saved_jobs
 
-**Contexte :** Les messages Kafka peuvent échouer (API OpenAI down, requête invalide, analyse introuvable). Sans file de reprise, les messages sont perdus silencieusement.
+**Context:** Application tracking follows a state cycle (saved → analyzed → cover letter → applied → feedback). A storage decision was needed.
 
-**Décision :** Chaque topic a un topic `.DLT` dédié. Politique de retry : 3 tentatives avec backoff exponentiel. Après épuisement, le message atterrit dans la DLT pour inspection manuelle et rejeu.
+**Decision:** A `status` column in the `saved_jobs` table. Enum: `SAVED → ANALYZED → COVER_LETTER → APPLIED → POSITIVE | NEGATIVE`. Forward-only transitions. Dashboard owns and mutates this field.
 
-**Alternatives :**
-- Retry infini : peut bloquer le consumer indéfiniment
-- Log + abandon : perte de données silencieuse
-- Pas de DLT (comportement Kafka par défaut) : message perdu à la première erreur
+**Alternatives:**
+- Dedicated `application_status` table with history: more flexible (full history, custom states), but overkill for this need
+- Dedicated state machine service: unnecessary technical exercise
 
-**Conséquences :** Résilience. Un message en DLT nécessite une action manuelle — acceptable pour un projet solo. Pour du multi-utilisateur, un mécanisme de rejeu automatique serait nécessaire.
+**Consequences:** Simple, single source of truth. No transition history — add a log table later if needed.
+
+---
+
+## AD-6 — CV Stored in PostgreSQL
+
+**Context:** The CV (markdown format) must be accessible by the analyzer for OpenAI calls. On a PC it could be a local file, but the analyzer inside its Docker container wouldn't have access.
+
+**Decision:** `cv` table in PostgreSQL. Single row (single CV). Upload via `POST /api/cv` on the dashboard. Content stored as TEXT.
+
+**Alternatives:**
+- Filesystem with shared Docker volume: more complex setup, less portable across OS/hosts
+- Object storage (S3): unjustified extra infra for a solo project
+
+**Consequences:** DB dependency for a file. If the CV grows large (images), reconsider storage. Easy to migrate later (upload interface is HTTP, storage backend is encapsulated).
+
+---
+
+## AD-7 — Redis Cache for Job Offers
+
+**Context:** API calls to JSearch and Adzuna have quotas and latency. Identical searches can be repeated.
+
+**Decision:** Redis cache-aside on the dashboard-service. 30-minute TTL. Key = query string. Cache miss → API call → store → return. Cache hit → immediate return.
+
+**Alternatives:**
+- In-memory cache (Caffeine): simpler, no Redis infra, but lost on restart and not shareable
+- PostgreSQL cache table: functional but slower, Redis adds a valuable tech badge
+
+**Consequences:** Extra infra (Redis), demonstrates an in-demand skill. Easy to remove if the project stays solo and quotas suffice.
+
+---
+
+## AD-8 — SSE from the Analyzer
+
+**Context:** The frontend needs real-time delivery of analysis and cover letter results. A notification channel was needed.
+
+**Decision:** The ai-analyzer-service exposes a single SSE endpoint `GET /api/events`. Two event types: `analysis-completed` and `cover-letter-completed`. Single-instance (no multi-instance scaling needed for a solo project).
+
+**Alternatives:**
+- WebSocket: bidirectional, heavier to implement. SSE suffices (unidirectional server → client)
+- HTTP polling: simple but not real-time, wastes resources
+- Dashboard as relay: would route through a non-reactive service, adding latency
+
+**Consequences:** SSE is simple, unidirectional, natively supported by browsers and WebFlux. If multi-instance scaling is needed later, add a `sse.events` Kafka topic as a bus.
+
+---
+
+## AD-9 — Dead-Letter Topic per Topic
+
+**Context:** Kafka messages can fail (OpenAI API down, invalid request, missing analysis). Without a retry mechanism, messages are silently lost.
+
+**Decision:** Each topic has a dedicated `.DLT` topic. Retry policy: 3 attempts with exponential backoff. After exhaustion, the message lands in the DLT for manual inspection and replay.
+
+**Alternatives:**
+- Infinite retry: can block the consumer indefinitely
+- Log and drop: silent data loss
+- No DLT (Kafka default): message lost on first failure
+
+**Consequences:** Resilience. A message in DLT requires manual action — acceptable for a solo project. For multi-user, an automatic replay mechanism would be needed.

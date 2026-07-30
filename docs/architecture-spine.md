@@ -170,7 +170,7 @@ flowchart LR
 
 | Name | Version |
 |---|---|
-| Java | 21 |
+| Java | 25 |
 | Spring Boot | 3.4.x |
 | Spring WebMVC | dashboard-service |
 | Spring WebFlux | ai-analyzer-service |
@@ -179,7 +179,7 @@ flowchart LR
 | Apache Kafka | 3.8.x |
 | PostgreSQL | 16 |
 | Redis | 7.x |
-| Angular | 18.x |
+| Angular | 22 |
 | Docker | latest |
 | Kubernetes | 1.30 (local: kind/minikube) |
 
