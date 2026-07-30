@@ -1,0 +1,283 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  
+  // ============================================================================
+  // Auto-update Configuration
+  // ============================================================================
+
+  "autoupdate": true,
+  "share": "manual",
+  "default_agent": "ocx",
+
+  // ============================================================================
+  // Opencode Framework - Configuration
+  // ============================================================================
+  // Configuration for JobStream project
+  // Optimized for Angular 21 + Java 25 stack
+
+  // Model Configuration
+  // ---------------------------------
+  // "model": "anthropic/claude-opus-4-5",
+  // "small_model": "anthropic/claude-haiku-4-5",
+
+  // Disabled Providers
+  // ---------------------------------
+  "disabled_providers": [],
+
+  // ============================================================================
+  // OpenCode Framework Agent Definitions
+  // ============================================================================
+  // Agents are auto-discovered from .opencode/agent/ directory
+
+  // ============================================================================
+  // Tool Configuration
+  // ============================================================================
+
+  "tools": {
+    "edit": true,
+    "bash": true,
+    "read": true,
+    "list": true,
+    "webfetch": true
+  },
+
+  // ============================================================================
+  // Permission Settings
+  // ============================================================================
+
+  "permission": {
+    "edit": "ask",
+    "write": "ask",
+    "bash": {
+      "git status": "ask",
+      "git diff": "ask",
+      "git log": "ask",
+      "git branch": "ask",
+      "git add": "ask",
+      "git commit": "ask",
+      "git push": "ask",
+      "npm install": "ask",
+      "npm run *": "ask",
+      "rm -rf": "ask",
+      "rm": "ask",
+      "*": "ask"
+    },
+    "webfetch": "allow"
+  },
+  
+  // ============================================================================
+  // Compaction Settings
+  // ============================================================================
+  
+  "compaction": {
+    "auto": true,
+    "prune": true
+  },
+  
+  // ============================================================================
+  // Watcher Settings
+  // ============================================================================
+  
+  "watcher": {
+    "ignore": [
+      "node_modules/**",
+      ".git/**",
+      ".venv/**",
+      "__pycache__/**",
+      "dist/**",
+      "build/**",
+      ".DS_Store"
+    ]
+  },
+
+  // ============================================================================
+  // MCP Server Configuration
+  // ============================================================================
+
+  "mcp": {
+    // MarkItDown - Microsoft's universal document reader
+    "markitdown": {
+      "type": "local",
+      "command": ["uvx", "markitdown-mcp", "--stdio"],
+      "enabled": true
+    },
+
+    // Excel - Spreadsheet manipulation
+    "excel": {
+      "type": "local",
+      "command": ["uvx", "excel-mcp-server", "stdio"],
+      "enabled": true
+    },
+
+    // Word - Document manipulation
+    "word": {
+      "type": "local",
+      "command": ["uvx", "--from", "office-word-mcp-server", "word_mcp_server"],
+      "enabled": true
+    },
+
+    // PowerPoint - Presentation manipulation
+    "powerpoint": {
+      "type": "local",
+      "command": ["uvx", "--from", "office-powerpoint-mcp-server", "ppt_mcp_server"],
+      "enabled": true
+    },
+
+    // Memory - Persistent memory storage
+    "memory": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-memory"],
+      "enabled": true
+    },
+
+    // Sequential Thinking - Advanced reasoning
+    "sequential-thinking": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-sequential-thinking"],
+      "enabled": true
+    },
+
+    // Context7 - Library documentation lookup
+    "context7": {
+      "type": "local",
+      "command": ["npx", "-y", "@upstash/context7-mcp"],
+      "enabled": true
+    },
+
+    // Git - Git operations via MCP
+    "git": {
+      "type": "local",
+      "command": ["uvx", "mcp-server-git"],
+      "enabled": false
+    },
+
+    // Filesystem - File system access
+    "filesystem": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-filesystem", "$PROJECT_DIR"],
+      "enabled": true
+    },
+
+    // Fetch - HTTP request capabilities
+    "fetch": {
+      "type": "local",
+      "command": ["uvx", "mcp-server-fetch"],
+      "enabled": true
+    },
+
+    // Serena - Code analysis and understanding
+    "serena": {
+      "type": "local",
+      "command": ["uvx", "--from", "git+https://github.com/oraios/serena", "serena-mcp-server", "--project", "$PROJECT_DIR", "--transport", "stdio"],
+      "enabled": true
+    },
+
+    // Brave Search - Web search capabilities
+    "brave-search": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-brave-search"],
+      "enabled": false,
+      "environment": {
+        "BRAVE_API_KEY": "your-api-key"
+      }
+    },
+
+    // Stitch - Google Design System (Maquettes UI)
+    // Permet d'accéder aux composants et maquettes Stitch via MCP distant
+    "stitch": {
+      "type": "remote",
+      "url": "https://stitch.googleapis.com/mcp",
+      "enabled": true,
+      "headers": {
+        "Accept": "application/json",
+        "X-Goog-Api-Key": "your-api-key"
+      }
+    }
+  },
+
+  // ============================================================================
+  // Code Formatter Configuration
+  // ============================================================================
+
+  "formatter": {
+    "javascript": {
+      "command": ["prettier", "--write", "$FILE"]
+    },
+    "typescript": {
+      "command": ["prettier", "--write", "$FILE"]
+    },
+    "json": {
+      "command": ["prettier", "--write", "$FILE"]
+    },
+    "markdown": {
+      "command": ["prettier", "--write", "$FILE"]
+    }
+  },
+
+  // ============================================================================
+  // Instructions and Rules
+  // ============================================================================
+
+  "instructions": [".opencode/instructions.md", ".opencode/rules/*.md"],
+
+  // ============================================================================
+  // LSP Server Configuration
+  // ============================================================================
+
+  "lsp": {},
+
+  // ============================================================================
+  // LLM Custom Providers Configuration
+  // ============================================================================
+  
+  "provider": {
+    "ollama": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Ollama",
+      "options": {
+        "baseURL": "http://127.0.0.1:11434/v1"
+      },
+      "models": {
+        "devstral:latest": {
+          "name": "devstral:latest",
+          "reasoning": true,
+          "tools": true
+        },
+        "qwen3-coder:latest": {
+          "name": "qwen3-coder:latest",
+          "reasoning": true,
+          "tools": true
+        },
+        "deepseek-r1:8b": {
+          "name": "deepseek-r1:8b",
+          "reasoning": true,
+          "tools": true
+        },
+        "deepseek-r1:32b": {
+          "name": "deepseek-r1:32b",
+          "reasoning": true,
+          "tools": true
+        },
+        "gemma3:27b": {
+          "name": "gemma3:27b",
+          "reasoning": true,
+          "tools": true
+        }
+      }
+    },
+    "anthropic": {
+      "options": {
+        "timeout": 600000,
+        "setCacheKey": true
+      }
+    }
+  },
+
+  // ============================================================================
+  // Plugins Configuration
+  // ============================================================================
+  
+  "plugin": [
+    "opencode-anthropic-auth"
+  ]
+}
