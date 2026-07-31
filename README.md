@@ -9,9 +9,9 @@ AI-assisted job candidature platform. Search job offers, analyze their fit with 
 
 ## Stack
 
-- **Backend :** Java 25, Spring Boot (WebMVC + WebFlux)
-- **Messaging :** Apache Kafka
-- **Database :** PostgreSQL + Redis (cache)
+- **Backend :** Java 25, Spring Boot 4.1.0 (WebMVC + WebFlux)
+- **Messaging :** Apache Kafka 4.3.1
+- **Database :** PostgreSQL 18 + Redis 8.2.x (cache)
 - **Frontend :** Angular 22
 - **Infra :** Docker, Kubernetes, Prometheus/Grafana
 

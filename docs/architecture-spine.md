@@ -235,14 +235,14 @@ flowchart LR
 | Name | Version |
 |---|---|
 | Java | 25 |
-| Spring Boot | 3.4.x |
+| Spring Boot | 4.1.0 |
 | Spring WebMVC | jobstream-api |
 | Spring WebFlux | ai-analyzer-service |
 | JPA / Hibernate | jobstream-api |
 | R2DBC | ai-analyzer-service |
-| Apache Kafka | 3.8.x |
-| PostgreSQL | 16 |
-| Redis | 7.x |
+| Apache Kafka | 4.3.1 |
+| PostgreSQL | 18 |
+| Redis | 8.2.x |
 | Angular | 22 |
 | Docker | latest |
 | Kubernetes | 1.30 (local: kind/minikube) |
