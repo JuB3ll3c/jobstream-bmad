@@ -8,7 +8,7 @@ All architectural decisions made for JobStream, with context, alternatives consi
 
 **Context:** JobStream has two distinct workloads: a classic CRUD (job saving, CV management, kanban) and a reactive I/O-bound pipeline (OpenAI calls, SSE streaming). Putting them in the same service would mix WebMVC and WebFlux or force a stack compromise.
 
-**Decision:** Two Spring Boot services communicating via Kafka. dashboard-service uses WebMVC/JPA for CRUD, ai-analyzer-service uses WebFlux/R2DBC for reactive processing. No direct REST calls between services — everything goes through Kafka.
+**Decision:** Two Spring Boot services communicating via Kafka. jobstream-api uses WebMVC/JPA for CRUD, ai-analyzer-service uses WebFlux/R2DBC for reactive processing. No direct REST calls between services — everything goes through Kafka.
 
 **Alternatives:**
 - Single Spring Boot monolith: simpler to deploy, but mixes stacks and doesn't show microservices mastery
@@ -92,7 +92,7 @@ All architectural decisions made for JobStream, with context, alternatives consi
 
 **Context:** API calls to JSearch and Adzuna have quotas and latency. Identical searches can be repeated.
 
-**Decision:** Redis cache-aside on the dashboard-service. 30-minute TTL. Key = query string. Cache miss → API call → store → return. Cache hit → immediate return.
+**Decision:** Redis cache-aside on the jobstream-api. 30-minute TTL. Key = query string. Cache miss → API call → store → return. Cache hit → immediate return.
 
 **Alternatives:**
 - In-memory cache (Caffeine): simpler, no Redis infra, but lost on restart and not shareable
@@ -129,3 +129,22 @@ All architectural decisions made for JobStream, with context, alternatives consi
 - No DLT (Kafka default): message lost on first failure
 
 **Consequences:** Resilience. A message in DLT requires manual action — acceptable for a solo project. For multi-user, an automatic replay mechanism would be needed.
+
+---
+
+## AD-10 — Hexagonal Architecture (Ports & Adapters)
+
+**Context:** The jobstream-api talks to two external job APIs (JSearch and Adzuna). Binding use cases directly to each provider would couple business logic to external SDKs, make tests harder, and complicate switching or aggregating providers. The project is also a technical showcase — hexagonal layering is a recognizable, in-demand skill.
+
+**Decision:** Each service follows a ports & adapters structure in three layers:
+- **Domain/Application** — entities (`SavedJob`, `Cv`, `JobOffer`, `AnalysisResult`) and use cases (`JobSearchService`, `SavedJobService`, `ReactiveAnalysisService`, `CoverLetterService`). No Spring/infra imports.
+- **Ports** — interfaces owned by the application layer: `JobProvider`, `CachePort`, `MessageBusPort`, `SavedJobRepository`, `AnalysisRepository`, `AiProvider`.
+- **Adapters** — one implementation per external system. In adapters: REST controllers, Kafka consumers. Out adapters: `JSearchAdapter`, `AdzunaAdapter`, `RedisCacheAdapter`, `JpaRepositoryAdapter`, `R2dbcAnalysisRepository`, `OpenAiAdapter`, `KafkaProducerAdapter`.
+
+The job list is the flagship case: `JobSearchService` depends only on `JobProvider`. JSearch and Adzuna sit behind two adapter implementations, so aggregation or fallback switching is a wiring/config decision, not a code change.
+
+**Alternatives:**
+- Classic Spring layering (controller → service → repository): simpler, but services couple to WebClient/Kafka/Redis concrete classes and providers are not swappable
+- Full clean architecture (use-case classes, entities at the center, no framework anywhere): too ceremonial for a solo project
+
+**Consequences:** +boilerplate (an interface per external system), +testability (mock ports instead of infra), +swappable providers, +a visible "hexagonal" skill badge. Domain layer stays framework-free; Spring remains the infrastructure wiring.

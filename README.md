@@ -20,7 +20,7 @@ AI-assisted job candidature platform. Search job offers, analyze their fit with 
 ```mermaid
 flowchart LR
     ANG[Angular SPA]
-    DASH[dashboard-service<br/>:8081]
+    DASH[jobstream-api<br/>:8081]
     ANL[ai-analyzer-service<br/>:8082]
     KF[Kafka]
     PG[(PostgreSQL)]
@@ -45,7 +45,7 @@ flowchart LR
 
 | Service | Stack | Port | Role |
 |---|---|---|---|
-| dashboard-service | Spring WebMVC + JPA | 8081 | Job CRUD, Redis cache, CV upload |
+| jobstream-api | Spring WebMVC + JPA | 8081 | Job CRUD, Redis cache, CV upload |
 | ai-analyzer-service | Spring WebFlux + R2DBC | 8082 | AI analysis, cover letter, SSE real-time |
 
 ### Infrastructure
@@ -53,7 +53,7 @@ flowchart LR
 ```mermaid
 flowchart TB
     subgraph DockerLocal[Docker Compose]
-        DASH[dashboard-service<br/>:8081]
+        DASH[jobstream-api<br/>:8081]
         ANL[ai-analyzer-service<br/>:8082]
         PG[(PostgreSQL<br/>:5432)]
         RD[(Redis<br/>:6379)]
@@ -71,6 +71,10 @@ flowchart TB
     DASH --> JS & AZ
     ANL --> OAI
 ```
+
+## Method
+
+Built with the [BMad Method](https://github.com/bmad-code-org/BMAD-METHOD) — AI-driven agile development workflow (agents, phases, ADR-tracked architecture).
 
 ## Docs
 

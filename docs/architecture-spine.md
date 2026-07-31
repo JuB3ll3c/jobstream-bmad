@@ -18,7 +18,7 @@ companions: []
 
 ## Design Paradigm
 
-**Event-driven microservices** communicating through Apache Kafka. Each service owns its read/write tables in a shared PostgreSQL. The frontend (Angular) communicates with the dashboard-service via REST and receives real-time events from the ai-analyzer-service via SSE.
+**Event-driven microservices** communicating through Apache Kafka. Each service owns its read/write tables in a shared PostgreSQL. The frontend (Angular) communicates with the jobstream-api via REST and receives real-time events from the ai-analyzer-service via SSE. Each service follows a **hexagonal (ports & adapters)** internal structure (AD-10): use cases depend on ports, adapters wrap external systems.
 
 ```mermaid
 flowchart LR
@@ -27,7 +27,7 @@ flowchart LR
     end
 
     subgraph Backend
-        DASH[dashboard-service<br/>WebMVC :8081]
+        DASH[jobstream-api<br/>WebMVC :8081]
         ANALYZER[ai-analyzer-service<br/>WebFlux :8082]
     end
 
@@ -62,29 +62,83 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-    subgraph dashboard-service
-        JOB_CTRL[JobController]
-        SAVED_CTRL[SavedJobController]
-        CV_CTRL[CvController]
-        JOB_SVC[JobSearchService]
-        CACHE_SVC[CacheService]
-        KAFKA_PROD[KafkaProducer]
+    subgraph jobstream-api
+        direction LR
+        subgraph app_dash[Application - Use Cases]
+            JOB_SVC[JobSearchService]
+            SAVED_SVC[SavedJobService]
+            CACHE_SVC[CacheService]
+        end
+        subgraph ports_dash[Ports]
+            JOB_PROVIDER[JobProvider]
+            CACHE_PORT[CachePort]
+            SAVED_REPO[SavedJobRepository]
+            BUS_PORT_DASH[MessageBusPort]
+        end
+        subgraph in_dash[In Adapters]
+            JOB_CTRL[JobController]
+            SAVED_CTRL[SavedJobController]
+            CV_CTRL[CvController]
+        end
+        subgraph out_dash[Out Adapters]
+            JS_ADP[JSearchAdapter]
+            AZ_ADP[AdzunaAdapter]
+            REDIS_ADP[RedisCacheAdapter]
+            JPA_ADP[JpaRepositoryAdapter]
+            KAFKA_PROD_ADP[KafkaProducerAdapter]
+        end
     end
 
     subgraph ai-analyzer-service
-        SSE_CTRL[SseController]
-        ANALYSIS_SVC[ReactiveAnalysisService]
-        COVER_SVC[CoverLetterService]
-        KAFKA_CONS[KafkaConsumer]
+        direction LR
+        subgraph app_ana[Application - Use Cases]
+            ANALYSIS_SVC[ReactiveAnalysisService]
+            COVER_SVC[CoverLetterService]
+        end
+        subgraph ports_ana[Ports]
+            AI_PROVIDER[AiProvider]
+            ANALYSIS_REPO[AnalysisRepository]
+            BUS_PORT_ANA[MessageBusPort]
+        end
+        subgraph in_ana[In Adapters]
+            SSE_CTRL[SseController]
+            KAFKA_CONS_ADP[KafkaConsumerAdapter]
+        end
+        subgraph out_ana[Out Adapters]
+            OPENAI_ADP[OpenAiAdapter]
+            R2DBC_ADP[R2dbcAnalysisRepository]
+        end
     end
 
-    JOB_SVC --> CACHE_SVC
-    JOB_SVC --> JS
-    JOB_SVC --> AZ
-    KAFKA_PROD --> KAFKA
-    KAFKA --> KAFKA_CONS
-    ANALYSIS_SVC --> OAI
-    COVER_SVC --> OAI
+    JOB_CTRL --> JOB_SVC
+    SAVED_CTRL --> SAVED_SVC
+    CV_CTRL --> SAVED_SVC
+    JOB_SVC --> JOB_PROVIDER
+    JOB_SVC --> CACHE_PORT
+    JOB_SVC --> SAVED_REPO
+    JOB_SVC --> BUS_PORT_DASH
+    SAVED_SVC --> SAVED_REPO
+    SAVED_SVC --> BUS_PORT_DASH
+    JOB_PROVIDER --> JS_ADP
+    JOB_PROVIDER --> AZ_ADP
+    CACHE_PORT --> REDIS_ADP
+    SAVED_REPO --> JPA_ADP
+    BUS_PORT_DASH --> KAFKA_PROD_ADP
+    KAFKA_PROD_ADP --> KAFKA
+    KAFKA --> KAFKA_CONS_ADP
+    KAFKA_CONS_ADP --> ANALYSIS_SVC
+    KAFKA_CONS_ADP --> COVER_SVC
+    SSE_CTRL --> ANALYSIS_SVC
+    SSE_CTRL --> COVER_SVC
+    ANALYSIS_SVC --> AI_PROVIDER
+    ANALYSIS_SVC --> ANALYSIS_REPO
+    COVER_SVC --> AI_PROVIDER
+    COVER_SVC --> ANALYSIS_REPO
+    AI_PROVIDER --> OPENAI_ADP
+    ANALYSIS_REPO --> R2DBC_ADP
+    JS_ADP --> JS
+    AZ_ADP --> AZ
+    OPENAI_ADP --> OAI
 ```
 
 ## Invariants & Rules
@@ -93,7 +147,7 @@ flowchart LR
 
 - **Binds:** `all`
 - **Prevents:** Synchronous cross-service calls (no REST between services)
-- **Rule:** Services communicate exclusively through Kafka topics. The only allowed synchronous calls are REST from frontend → dashboard, and SSE from analyzer → frontend.
+- **Rule:** Services communicate exclusively through Kafka topics. The only allowed synchronous calls are REST from frontend → jobstream-api, and SSE from analyzer → frontend.
 
 ### AD-2 — Shared Database, Isolated Table Ownership
 
@@ -103,8 +157,8 @@ flowchart LR
 
 | Table | Owner |
 |---|---|
-| `saved_jobs` | dashboard-service |
-| `cv` | dashboard-service |
+| `saved_jobs` | jobstream-api |
+| `cv` | jobstream-api |
 | `analysis_results` | ai-analyzer-service |
 
 ### AD-3 — Two Kafka Topics
@@ -124,26 +178,26 @@ flowchart LR
 
 ### AD-5 — Kanban Status in saved_jobs
 
-- **Binds:** `dashboard-service`
+- **Binds:** `jobstream-api`
 - **Prevents:** A separate kanban/state management service or table
 - **Rule:** `saved_jobs.status` is an enum: `SAVED → ANALYZED → COVER_LETTER → APPLIED → POSITIVE | NEGATIVE`. Transitions are forward-only; `status` is mutated by the service that owns the preceding step.
 
 ### AD-6 — CV Stored in PostgreSQL
 
-- **Binds:** `dashboard-service`
+- **Binds:** `jobstream-api`
 - **Prevents:** Filesystem storage (no local file coupling), object storage (no S3 infra)
-- **Rule:** CV content stored as TEXT in table `cv`. One row (single CV for single user). Uploaded via `POST /api/cv` to dashboard.
+- **Rule:** CV content stored as TEXT in table `cv`. One row (single CV for single user). Uploaded via `POST /api/cv` to jobstream-api.
 
 ### AD-7 — Redis for Job Search Cache
 
-- **Binds:** `dashboard-service`
+- **Binds:** `jobstream-api`
 - **Prevents:** Repeated identical API calls within cache TTL
 - **Rule:** `GET /api/jobs?q=...` results are cached in Redis with a TTL of 30 minutes. Cache key is the query string. Miss → call external API → store in Redis → return. Hit → return immediately.
 
 ### AD-8 — SSE from ai-analyzer-service
 
 - **Binds:** `ai-analyzer-service`
-- **Prevents:** Polling from frontend, dashboard-service as SSE intermediary
+- **Prevents:** Polling from frontend, jobstream-api as SSE intermediary
 - **Rule:** Real-time events (`analysis-completed`, `cover-letter-completed`) are pushed exclusively by the ai-analyzer-service via `GET /api/events` (Flux SSE). Single-instance SSE is sufficient (single-user project).
 
 ### AD-9 — DLT per Topic
@@ -151,6 +205,16 @@ flowchart LR
 - **Binds:** `ai-analyzer-service`
 - **Prevents:** Silent message loss on processing failure
 - **Rule:** Each consumer has a dead-letter topic with retry policy (3 retries, exponential backoff). Failed messages land in `*.DLT` for manual inspection / replay.
+
+### AD-10 — Hexagonal Architecture (Ports & Adapters)
+
+- **Binds:** `all`
+- **Prevents:** Domain/application coupling to infrastructure (WebClient, Kafka, Redis, JPA/R2DBC, Spring beans)
+- **Rule:** Each service is structured in three layers:
+  - **Domain/Application** — entities (`SavedJob`, `Cv`, `JobOffer`, `AnalysisResult`) + use cases (`JobSearchService`, `SavedJobService`, `ReactiveAnalysisService`, `CoverLetterService`). Framework-free.
+  - **Ports** — interfaces owned by the application layer: `JobProvider`, `CachePort`, `MessageBusPort`, `SavedJobRepository`, `AnalysisRepository`, `AiProvider`.
+  - **Adapters** — one implementation per external system. In adapters: REST controllers, Kafka consumers. Out adapters: `JSearchAdapter`, `AdzunaAdapter`, `RedisCacheAdapter`, `JpaRepositoryAdapter`, `R2dbcAnalysisRepository`, `OpenAiAdapter`, `KafkaProducerAdapter`.
+- **Rule:** `JobSearchService` depends on the `JobProvider` port only — never on JSearch/Adzuna directly. Provider aggregation or fallback is a wiring/config decision, not a code change.
 
 ## Consistency Conventions
 
@@ -164,7 +228,7 @@ flowchart LR
 | Error shape | `{ "error": "...", "status": N }` |
 | Config | Spring application.yml per service, environment vars for secrets |
 | Logging | Structured JSON (Logback), traceable via correlation ID |
-| API contracts | Shared DTOs in `common/` module (OpenAPI-generated) |
+| API contracts | DTOs generated by OpenAPI in each service (`target/generated-sources`); shared contract = OpenAPI spec |
 
 ## Stack
 
@@ -172,9 +236,9 @@ flowchart LR
 |---|---|
 | Java | 25 |
 | Spring Boot | 3.4.x |
-| Spring WebMVC | dashboard-service |
+| Spring WebMVC | jobstream-api |
 | Spring WebFlux | ai-analyzer-service |
-| JPA / Hibernate | dashboard-service |
+| JPA / Hibernate | jobstream-api |
 | R2DBC | ai-analyzer-service |
 | Apache Kafka | 3.8.x |
 | PostgreSQL | 16 |
@@ -191,7 +255,7 @@ flowchart LR
 C4Context
     Person(user, "User (Julien)", "Single user, tech recruiter target")
     System_Boundary(jobstream, "JobStream Platform") {
-        System(dashboard, "dashboard-service", "Spring Boot WebMVC :8081")
+        System(dashboard, "jobstream-api", "Spring Boot WebMVC :8081")
         System(analyzer, "ai-analyzer-service", "Spring Boot WebFlux :8082")
         SystemDb(pg, "PostgreSQL", "Shared database")
         SystemDb(redis, "Redis", "Job search cache")
@@ -255,43 +319,64 @@ erDiagram
 
 ```text
 backend/
-├── common/                          # Shared DTOs (OpenAPI-generated)
-│   └── src/main/java/com/jobstream/dto/
-│       ├── JobAnalysisRequest.java
-│       ├── JobAnalysisResult.java
-│       └── CoverLetterRequest.java      # NEW
-├── dashboard-service/
+├── jobstream-api/
 │   ├── Dockerfile
 │   ├── pom.xml
 │   └── src/main/java/com/jobstream/
-│       ├── controller/
+│       ├── adapter/in/                  # Driving adapters (REST)
 │       │   ├── JobController.java
 │       │   ├── SavedJobController.java
-│       │   └── CvController.java         # NEW — POST /api/cv
-│       ├── service/
+│       │   └── CvController.java        # NEW — POST /api/cv
+│       ├── application/                 # Use cases — depend only on ports
 │       │   ├── JobSearchService.java
-│       │   ├── AnalysisProducerService.java
-│       │   └── CacheService.java         # NEW — Redis cache
-│       ├── entity/
+│       │   ├── SavedJobService.java
+│       │   └── CacheService.java        # NEW — cache-aside orchestration
+│       ├── domain/
 │       │   ├── SavedJob.java
-│       │   └── Cv.java                   # NEW
+│       │   ├── Cv.java                  # NEW
+│       │   └── JobOffer.java            # NEW — normalized offer model
+│       ├── port/                        # NEW — interfaces owned by application
+│       │   ├── JobProvider.java         # NEW — job sources (JSearch/Adzuna)
+│       │   ├── CachePort.java           # NEW
+│       │   ├── SavedJobRepository.java  # NEW
+│       │   └── MessageBusPort.java      # NEW
+│       ├── adapter/out/                 # Driven adapters — one per external system
+│       │   ├── jobprovider/
+│       │   │   ├── JSearchAdapter.java  # NEW
+│       │   │   └── AdzunaAdapter.java   # NEW
+│       │   ├── cache/
+│       │   │   └── RedisCacheAdapter.java      # NEW
+│       │   ├── persistence/
+│       │   │   └── JpaSavedJobRepository.java   # NEW
+│       │   └── messaging/
+│       │       └── KafkaProducerAdapter.java    # NEW
 │       └── config/
 │           ├── KafkaConfig.java
-│           ├── RedisConfig.java          # NEW
+│           ├── RedisConfig.java         # NEW
 │           └── WebClientConfig.java
 └── ai-analyzer-service/
     ├── Dockerfile
     ├── pom.xml
     └── src/main/java/com/jobstream/analyzer/
-        ├── controller/
-        │   └── AnalysisEventController.java  # SSE
-        ├── service/
-        │   ├── ReactiveAnalysisService.java
-        │   ├── CoverLetterService.java       # NEW
-        │   └── SseBroadcaster.java
-        ├── consumer/
+        ├── adapter/in/
+        │   ├── AnalysisEventController.java   # SSE
         │   ├── AnalysisRequestConsumer.java
-        │   └── CoverLetterConsumer.java      # NEW
+        │   └── CoverLetterConsumer.java       # NEW
+        ├── application/
+        │   ├── ReactiveAnalysisService.java
+        │   ├── CoverLetterService.java        # NEW
+        │   └── SseBroadcaster.java
+        ├── domain/
+        │   └── AnalysisResult.java
+        ├── port/                              # NEW
+        │   ├── AiProvider.java                # NEW — OpenAI
+        │   ├── AnalysisRepository.java        # NEW
+        │   └── MessageBusPort.java            # NEW
+        ├── adapter/out/
+        │   ├── ai/
+        │   │   └── OpenAiAdapter.java         # NEW
+        │   └── persistence/
+        │       └── R2dbcAnalysisRepository.java # NEW
         └── config/
             ├── KafkaConfig.java
             └── OpenAiConfig.java
@@ -302,7 +387,7 @@ backend/
 ```mermaid
 sequenceDiagram
     participant F as Angular Frontend
-    participant D as dashboard-service
+    participant D as jobstream-api
     participant K as Kafka
     participant A as ai-analyzer-service
     participant O as OpenAI
@@ -359,15 +444,15 @@ sequenceDiagram
 
 | Capability | Lives in | Governed by |
 |---|---|---|
-| Job search (external APIs) | dashboard-service | AD-7, AD-3 |
-| Saved jobs CRUD | dashboard-service | AD-2 |
-| Kanban status management | dashboard-service | AD-5 |
-| CV upload & storage | dashboard-service | AD-6, AD-2 |
-| Job analysis (AI) | ai-analyzer-service | AD-1, AD-3, AD-4 |
-| Cover letter generation | ai-analyzer-service | AD-1, AD-3, AD-4 |
-| Real-time SSE notifications | ai-analyzer-service | AD-8 |
-| Job search caching | dashboard-service | AD-7 |
-| Message resilience | ai-analyzer-service | AD-9 |
+| Job search (external APIs) | jobstream-api | AD-7, AD-3, AD-10 |
+| Saved jobs CRUD | jobstream-api | AD-2, AD-10 |
+| Kanban status management | jobstream-api | AD-5, AD-10 |
+| CV upload & storage | jobstream-api | AD-6, AD-2, AD-10 |
+| Job analysis (AI) | ai-analyzer-service | AD-1, AD-3, AD-4, AD-10 |
+| Cover letter generation | ai-analyzer-service | AD-1, AD-3, AD-4, AD-10 |
+| Real-time SSE notifications | ai-analyzer-service | AD-8, AD-10 |
+| Job search caching | jobstream-api | AD-7, AD-10 |
+| Message resilience | ai-analyzer-service | AD-9, AD-10 |
 
 ## Deferred
 
