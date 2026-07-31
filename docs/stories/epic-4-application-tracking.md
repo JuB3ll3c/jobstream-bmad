@@ -39,6 +39,6 @@ So that I see every application's stage at a glance and move it forward (FR-10 U
 **Acceptance Criteria:**
 
 **Given** the Board tab with 5 columns (`SAVED`, `ANALYZED`, `COVER_LETTER`, `APPLIED`, terminal `POSITIVE | NEGATIVE`) and cards showing title, company, status pill, score badge when analyzed
-**When** I drag a card (drag & drop enabled from `COVER_LETTER` forward) or move it via keyboard (arrows + Enter + Esc)
+**When** I drag a card (drag & drop via `@angular/cdk/drag-drop`, enabled from `COVER_LETTER` forward)
 **Then** the card lands and the status persists; the terminal column stays neutral with the pill carrying the verdict
 **And** a backward move attempt is rejected with a toast ("That move isn't allowed — status can only move forward.") and the card snaps back; below `lg` the board degrades to a single-column status list

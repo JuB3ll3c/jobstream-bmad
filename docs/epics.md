@@ -69,11 +69,11 @@ This document provides the epic breakdown for JobStream, decomposing the require
 - **UX-DR2 — Component layer.** Build reusable components: Button (primary/secondary), Input (2px `ring` focus halo), Card, Modal (single-level stack), Kanban column, Status badge (pill), Score badge, Analysis panel, Toast, Pagination.
 - **UX-DR3 — Score ramp.** ≥80 green, 50–79 amber, <50 red; number and label always agree.
 - **UX-DR4 — Navigation.** Top bar with three tabs (Search · Board · CV); job detail and cover letter layer as panels over Search/Board; modal stacks one level deep.
-- **UX-DR5 — Kanban board.** 5 columns with a shared terminal `POSITIVE | NEGATIVE` column (pill carries the verdict); forward-only; drag & drop after `COVER_LETTER`; keyboard fallback (arrows + Enter + Esc); board reflects persisted status.
+- **UX-DR5 — Kanban board.** 5 columns with a shared terminal `POSITIVE | NEGATIVE` column (pill carries the verdict); forward-only; drag & drop after `COVER_LETTER` via `@angular/cdk/drag-drop`; board reflects persisted status.
 - **UX-DR6 — SSE in-progress states.** Analysis panel renders skeleton + live status line ("Extracting CV context… Analyzing…"); completion swaps content in place via SSE, no page refresh, `aria-live` announcement.
-- **UX-DR7 — Accessibility floor.** WCAG 2.2 AA; 2px focus ring at AA contrast; keyboard-operable board; `prefers-reduced-motion` respected (static status lines, no shimmer).
+- **UX-DR7 — Accessibility floor.** WCAG 2.2 AA; 2px focus ring at AA contrast; `prefers-reduced-motion` respected (static status lines, no shimmer).
 - **UX-DR8 — Microcopy.** English, professional/human voice per EXPERIENCE.md Voice and Tone table (e.g., "Analyze this offer", "Report ready", "That move isn't allowed — status can only move forward.").
-- **UX-DR9 — Interaction primitives.** `/` focuses search, `Enter` submits/confirms, `s` saves job row, `Esc` closes panels; board keyboard-operable. Mouse-first; drag & drop is the board's centerpiece gesture.
+- **UX-DR9 — Interaction primitives.** `/` focuses search, `Enter` submits/confirms, `s` saves job row, `Esc` closes panels. Mouse-first; drag & drop is the board's centerpiece gesture.
 - **UX-DR10 — Pagination.** Footer under search results, 20 per page; backward/forward + page numbers. Never infinite scroll.
 - **UX-DR11 — Backward moves rejected.** Toast + card snap-back; no animation of the invalid state.
 - **UX-DR12 — CV overwrite confirm.** Upload replaces the previous CV after an explicit modal confirm ("Replace current CV?"); destructive-tone confirm.

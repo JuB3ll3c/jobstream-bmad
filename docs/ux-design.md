@@ -59,11 +59,11 @@ Inter everywhere — no display font. Hierarchy by weight/size: `display` 24px/6
 
 ### Interaction primitives
 
-Mouse-first (drag & drop is the centerpiece), with `/` (search), `Enter`, `s` (save), `Esc`, and full keyboard fallback for the board (not mouse-only).
+Mouse-first (drag & drop is the centerpiece), with `/` (search), `Enter`, `s` (save), `Esc`.
 
 ### Accessibility floor
 
-WCAG 2.2 AA, 2px focus ring at AA contrast, `aria-live` on SSE completions, keyboard-operable board, `prefers-reduced-motion` respected.
+WCAG 2.2 AA, 2px focus ring at AA contrast, `aria-live` on SSE completions, `prefers-reduced-motion` respected.
 
 ### Key flows
 
