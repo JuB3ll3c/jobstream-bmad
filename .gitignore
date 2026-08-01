@@ -14,7 +14,7 @@ target/
 Thumbs.db
 
 # Env
-.env
+codebase/.env
 *.user.toml
 
 # Node

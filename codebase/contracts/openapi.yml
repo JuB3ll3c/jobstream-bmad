@@ -1,0 +1,17 @@
+openapi: 3.1.0
+info:
+  title: Jobstream API Contract
+  description: |
+    Shared contract between jobstream-api and ai-analyzer-service, and single
+    source of truth for DTO generation (backend `target/generated-sources`,
+    frontend OpenAPI Angular generation). Endpoints are added by their owning
+    stories; this file is never the place for hand-written DTOs.
+  version: 0.1.0
+servers:
+  - url: http://localhost:8081
+    description: jobstream-api (local)
+  - url: http://localhost:8082
+    description: ai-analyzer-service (local)
+paths: {}
+components:
+  schemas: {}
