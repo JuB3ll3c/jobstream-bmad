@@ -1,2 +1,10 @@
+spring:
+  application:
+    name: jobstream-api
+  datasource:
+    url: jdbc:postgresql://localhost:5432/jobstream
+    username: jobstream
+    password: jobstream
+    driver-class-name: org.postgresql.Driver
 server:
   port: 8081

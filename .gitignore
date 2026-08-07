@@ -22,3 +22,4 @@ node_modules/
 
 _bmad-output/
 .opencode/node_modules/
+/_bmad/_config/resolved.json
